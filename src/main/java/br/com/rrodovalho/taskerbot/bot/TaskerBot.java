@@ -38,6 +38,7 @@ public class TaskerBot {
     WebElement registroEsforco;
     WebElement incluirRegistro;
     WebElement finalHora;
+    WebElement alertError;
 
     public TaskerBot(Tasker taskerInfo) {
         this.taskerInfo = taskerInfo;
@@ -217,10 +218,14 @@ public class TaskerBot {
 
     public boolean checkErrorAlert(){
 
-        WebElement alertError = null;
 
        try {
-           alertError = mDriver.findElement(By.id("messagebox-1001"));
+           doActionWhenIsPossible(new WebElementActionAfterDelay() {
+               @Override
+               public void action() {
+                   alertError = mDriver.findElement(By.id("messagebox-1001"));
+               }
+           });
 
            if(alertError.isDisplayed()){
 
@@ -230,7 +235,10 @@ public class TaskerBot {
                botaoAlert.click();
                Thread.sleep (2000);
                WebElement cancel = mDriver.findElement(By.id("btnCancel_win-detail-mdlEsforco-btnInnerEl"));
-               cancel.click();
+               Actions actions = new Actions(mDriver);
+               actions.moveToElement(cancel);
+               actions.click();
+               actions.perform();
                failureReasons.add(text);
                return true;
            }
@@ -295,7 +303,7 @@ public class TaskerBot {
 //        System.out.println("Done...");
         comentario.click();
 
-        while (tarefa.getAttribute("value").length() == 6){
+        while (tarefa.getAttribute("value").length() == alocacao.getTarefa().length()){
             if(checkErrorAlert()){
                 failureIndexes.add(index);
                 return ;
