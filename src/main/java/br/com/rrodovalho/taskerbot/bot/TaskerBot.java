@@ -1,16 +1,13 @@
 package br.com.rrodovalho.taskerbot.bot;
 
-import br.com.rrodovalho.taskerbot.domain.AllocationResponse;
-import br.com.rrodovalho.taskerbot.domain.Alocacao;
-import br.com.rrodovalho.taskerbot.domain.Failure;
-import br.com.rrodovalho.taskerbot.domain.Tasker;
+import br.com.rrodovalho.taskerbot.domain.*;
 import org.openqa.selenium.By;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.chrome.ChromeDriver;
-import org.openqa.selenium.chrome.ChromeOptions;
-import org.openqa.selenium.htmlunit.HtmlUnitDriver;
+import org.openqa.selenium.interactions.Actions;
+import org.openqa.selenium.phantomjs.PhantomJSDriver;
+import org.openqa.selenium.phantomjs.PhantomJSDriverService;
 import org.openqa.selenium.remote.DesiredCapabilities;
 
 import java.io.InvalidObjectException;
@@ -27,8 +24,6 @@ public class TaskerBot {
     private WebDriver mDriver;
     private final static String CHROME_DRIVER_PATH ="/home/rrodovalho/Downloads/chromedriver";
     public final static String BASE_URL = "https://muxi.tasker.com.br/tasker/T5";
-//    public final static String USER = "rrodovalho";
-//    public final static String USER_PASS = "computacao@appi7";
     public final static String USER_LOGIN_INPUT_ELEMENT_ID = "txtUsuario";
     public final static String USER_PASSWORD_LOGIN_INPUT_ELEMENT_ID = "txtSenha";
     public final static String LOGIN_SUBMIT_ELEMENT_ID = "botaoDeLogin";
@@ -37,19 +32,65 @@ public class TaskerBot {
     private List<Integer> failureIndexes;
     private List<String> failureReasons;
 
+    String PHANTOMJS_BINARY;
+
+    WebElement loginElement;
+    WebElement registroEsforco;
+    WebElement incluirRegistro;
+    WebElement finalHora;
+
     public TaskerBot(Tasker taskerInfo) {
         this.taskerInfo = taskerInfo;
-        System.setProperty("webdriver.chrome.driver", CHROME_DRIVER_PATH);
-//        ChromeOptions options= new ChromeOptions();
-//        options.addArguments("--no-startup-window");
-//
-//        DesiredCapabilities capabilities = DesiredCapabilities.chrome();
-//        capabilities.setCapability(ChromeOptions.CAPABILITY, options);
-//        mDriver = new ChromeDriver(capabilities);
-        mDriver = new ChromeDriver();
+        resolvePhantomJSBinaryFile();
+        final DesiredCapabilities capabilities = new DesiredCapabilities();
+        capabilities.setJavascriptEnabled(true);
+        capabilities.setCapability("takesScreenshot", false);
+        capabilities.setCapability(
+                PhantomJSDriverService.PHANTOMJS_EXECUTABLE_PATH_PROPERTY,
+                PHANTOMJS_BINARY
+        );
+
+        mDriver = new PhantomJSDriver(capabilities);
         sucessIndexes = new ArrayList<>();
         failureIndexes = new ArrayList<>();
         failureReasons = new ArrayList<>();
+
+    }
+
+    private void resolvePhantomJSBinaryFile(){
+
+        String osPJSPath = null;
+        String osName = System.getProperty("os.name");
+        String osNameMatch = osName.toLowerCase();
+        if(osNameMatch.contains("linux")) {
+            osPJSPath = "phantomjs-2.1.1-linux-x86_64";
+        }else if(osNameMatch.contains("windows")) {
+            osPJSPath = "phantomjs-2.1.1-windows";
+        }else if(osNameMatch.contains("mac")  || osNameMatch.contains("darwin")) {
+            osPJSPath = "phantomjs-2.1.1-macosx";
+        }
+
+        PHANTOMJS_BINARY = "phantomJS_binaryDriver/"+osPJSPath+"/phantomjs";
+    }
+
+    private void doActionWhenIsPossible(WebElementActionAfterDelay delay){
+
+        while (true){
+            try{
+                delay.action();
+                break;
+            }
+            catch (Exception e){
+//             e.printStackTrace();
+            }
+            finally {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
 
     }
 
@@ -78,8 +119,7 @@ public class TaskerBot {
             allocationResponse.setFailure(failure);
             return allocationResponse;
         }
-        goToTimeSheet();
-        goToEffordRegistration();
+        goToEffortRegistration();
 
         try {
             insertAllocations();
@@ -87,7 +127,9 @@ public class TaskerBot {
             e.printStackTrace();
         }
         logOut();
+        System.out.println("Logout");
         mDriver.quit();
+        System.out.println("browser quit");
         if(sucessIndexes.size() > 0){
             allocationResponse.setSuccess(sucessIndexes);
         }
@@ -111,16 +153,21 @@ public class TaskerBot {
         if(mDriver.getPageSource().equalsIgnoreCase("Unknown host")){
             throw new UnknownHostException(BASE_URL);
         }
-        try {
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
     }
 
     private void logIn() throws InvalidObjectException {
 
-        WebElement loginElement = mDriver.findElement(By.id(USER_LOGIN_INPUT_ELEMENT_ID));
+        doActionWhenIsPossible(new WebElementActionAfterDelay() {
+
+            public void action() {
+//                System.out.println("Searching for user input element...");
+                loginElement = mDriver.findElement(By.id(USER_LOGIN_INPUT_ELEMENT_ID));
+//                System.out.println("Done...");
+//                System.out.println("Sending keys for username...");
+                loginElement.sendKeys(taskerInfo.getCredential().getUser());
+            }
+        });
+
         WebElement passwordElement = mDriver.findElement(By.id(USER_PASSWORD_LOGIN_INPUT_ELEMENT_ID));
         WebElement submitButton = mDriver.findElement(By.id(LOGIN_SUBMIT_ELEMENT_ID));
 
@@ -128,61 +175,44 @@ public class TaskerBot {
             throw new InvalidObjectException("Invalid login web elements");
         }
 
-        loginElement.sendKeys(taskerInfo.getCredential().getUser());
         passwordElement.sendKeys(taskerInfo.getCredential().getPass());
         submitButton.click();
-        try {
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+
     }
 
     public void logOut(){
-        WebElement registroEsforco = mDriver.findElement(By.id("id-menu-btnLogout-btnInnerEl"));
-        try {
-            Thread.sleep(3000);
-            registroEsforco.click();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+        WebElement logOutButton = mDriver.findElement(By.id("id-menu-btnLogout-btnInnerEl"));
+        Actions actions = new Actions(mDriver);
+        actions.moveToElement(logOutButton);
+        actions.click();
+        actions.perform();
     }
 
-    private void goToTimeSheet(){
-        WebElement timeSheet = mDriver.findElement(By.id("id-menu-96-btnIconEl"));
-        try {
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        timeSheet.click();
+
+    private void goToEffortRegistration(){
+
+        doActionWhenIsPossible(new WebElementActionAfterDelay() {
+            public void action() {
+//                System.out.println("Searching for registroEsforco element...");
+                registroEsforco = mDriver.findElement(By.id("id-toolbarbutton-102-btnIconEl"));
+//                System.out.println("Done");
+                registroEsforco.click();
+//                System.out.println("Clicked on registroEsforco element...");
+            }
+        });
     }
 
-    private void goToEffordRegistration(){
+    public void includeEffort(){
 
-        WebElement registroEsforco = mDriver.findElement(By.id("id-menu-102-textEl"));
-        try {
-            Thread.sleep(3000);
-
-            registroEsforco.click();
-
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void includeEfford(){
-
-        WebElement incluirRegistro = mDriver.findElement(By.id("btnAddAlocacao-btnInnerEl"));
-        try {
-            Thread.sleep(3000);
-            incluirRegistro.click();
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
+        doActionWhenIsPossible(new WebElementActionAfterDelay() {
+            public void action() {
+//                System.out.println("Searching for incluirRegistro element...");
+                incluirRegistro = mDriver.findElement(By.id("btnAddAlocacao-btnInnerEl"));
+//                System.out.println("Done");
+                incluirRegistro.click();
+//                System.out.println("Clicked on incluirRegistro element...");
+            }
+        });
     }
 
     public boolean checkErrorAlert(){
@@ -227,7 +257,7 @@ public class TaskerBot {
 
             for(int j=0;j<taskerInfo.getExpedientes().get(i).getAlocacoes().size();j++){
                 count++;
-                includeEfford();
+                includeEffort();
                 makeSingleAllocation(data,taskerInfo.getExpedientes().get(i).getAlocacoes().get(j),count);
             }
         }
@@ -235,36 +265,52 @@ public class TaskerBot {
 
     public void  makeSingleAllocation(String allocData,Alocacao alocacao,int index) throws InterruptedException {
 
+        doActionWhenIsPossible(new WebElementActionAfterDelay() {
+            public void action() {
+//                System.out.println("Sending keys for finalHora...");
+                finalHora = mDriver.findElement(By.id("ESFHORARIOTERMINO-inputEl"));
+                finalHora.click();
+                finalHora.sendKeys(alocacao.getTermino());
+            }
+        });
+
         WebElement inicioHora = mDriver.findElement(By.id("ESFHORARIOINICIO-inputEl"));
-        Thread.sleep(1000);
+        inicioHora.click();
+//        System.out.println("Sending keys for inicioHora...");
         inicioHora.sendKeys(alocacao.getInicio());
-        Thread.sleep(1000);
-        WebElement tarefa = mDriver.findElement(By.id("cmp_ESFSOLCOD-inputEl"));
-        tarefa.sendKeys(alocacao.getTarefa());
-        Thread.sleep(1000);
+//        System.out.println("Done");
         WebElement comentario = mDriver.findElement(By.id("ESFCOMENTARIO"));
-        comentario.click();
-        Thread.sleep(4000);
-
-        if(checkErrorAlert()){
-
-//            response.append("\nFail to alloc  "+alocacao.toString()+"  at  "+allocData+"  reason:  "+s).toString();
-            failureIndexes.add(index);
-            return ;
-        }
+//        System.out.println("Click on comentario element...");
+//        System.out.println("Sending keys for comentario...");
         comentario.sendKeys(alocacao.getComentario());
         WebElement data = mDriver.findElement(By.id("ESFDATA-inputEl"));
+//        System.out.println("Click on data element...");
         data.click();
-        Thread.sleep(6000);
+//        System.out.println("Sending keys for data...");
         data.sendKeys(allocData.replace("/",""));
-        Thread.sleep(1000);
-        WebElement finalHora = mDriver.findElement(By.id("ESFHORARIOTERMINO-inputEl"));
-        Thread.sleep(3000);
-        finalHora.sendKeys(alocacao.getTermino());
+        WebElement tarefa = mDriver.findElement(By.id("cmp_ESFSOLCOD-inputEl"));
+        tarefa.click();
+//        System.out.println("Sending keys for tarefa...");
+        tarefa.sendKeys(alocacao.getTarefa());
+//        System.out.println("Done...");
+        comentario.click();
+
+        while (tarefa.getAttribute("value").length() == 6){
+            if(checkErrorAlert()){
+                failureIndexes.add(index);
+                return ;
+            }
+//            System.out.println("Waiting for tasker job resolution");
+            Thread.sleep(1000);
+        }
+
         WebElement confimar = mDriver.findElement(By.id("btnConfirm_win-detail-mdlEsforco-btnInnerEl"));
-        confimar.click();
-        Thread.sleep(5000);
-//        response.append("\nSuccess to alloc  "+alocacao.toString()+"  at  "+allocData).toString();
+        Actions actions = new Actions(mDriver);
+        actions.moveToElement(confimar);
+        actions.click();
+        actions.perform();
+        Thread.sleep(3000);
+
         sucessIndexes.add(index);
     }
 
